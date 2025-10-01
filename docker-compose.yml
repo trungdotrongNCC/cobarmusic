@@ -1,0 +1,17 @@
+version: "3.9"
+services:
+  postgres:
+    image: postgres:16
+    container_name: cobar_pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cobar
+      POSTGRES_PASSWORD: cobarpass
+      POSTGRES_DB: cobardb
+    ports:
+      - "5432:5432"
+    volumes:
+      - cobar_pg_data:/var/lib/postgresql/data
+
+volumes:
+  cobar_pg_data:

@@ -1,0 +1,95 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              Int              @id @default(autoincrement())
+  email           String           @unique
+  name            String?
+  mezonId         String?          @unique // ID Mezon (mezon_id hoặc sub từ userinfo)
+  avatarUrl       String?
+  username        String?
+  createdAt       DateTime         @default(now())
+  role            String           @default("user")
+  paymentSessions PaymentSession[] @relation("UserPaymentSessions")
+  sessions        Session[]
+  songs           Song[]
+  purchases       Purchase[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([userId])
+}
+
+model Genre {
+  id    Int    @id @default(autoincrement())
+  name  String @unique
+  songs Song[]
+}
+
+model Song {
+  id              Int              @id @default(autoincrement())
+  title           String
+  previewPath     String
+  fullPath        String
+  description     String?
+  price           Decimal          @db.Decimal(10, 2)
+  listens         Int              @default(0)
+  purchases       Purchase[] // người mua
+  avatar          String?
+  sellerId        Int
+  seller          User             @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  paymentSessions PaymentSession[] @relation("SongPaymentSessions")
+  genres          Genre[] // implicit many-to-many
+  createdAt       DateTime         @default(now())
+
+  @@index([sellerId])
+}
+
+model Purchase {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  songId      Int
+  priceAtBuy  Decimal  @db.Decimal(10, 2)
+  purchasedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  song Song @relation(fields: [songId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, songId]) // 1 user mua 1 bài tối đa 1 lần
+}
+
+model PaymentSession {
+  id        String   @id @default(cuid())
+  sessionId String   @unique
+  userId    Int
+  songId    Int
+  amount    Int
+  currency  String   @default("VND")
+  status    String
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Đặt tên relation để tường minh
+  user User @relation(name: "UserPaymentSessions", fields: [userId], references: [id])
+  song Song @relation(name: "SongPaymentSessions", fields: [songId], references: [id])
+}
