@@ -11,7 +11,7 @@ export default async function LeftSidebar() {
 
   let me = null;
   if (token) {
-    // Lấy session + user theo token
+    // Tìm session + user theo token
     const session = await prisma.session.findUnique({
       where: { token },
       include: {
@@ -20,24 +20,21 @@ export default async function LeftSidebar() {
             email: true,
             name: true,
             avatarUrl: true,
-            // nếu bạn có cột credits/balance thì select ở đây
-            credits: true, // hoặc balance tuỳ schema
+            // ❌ KHÔNG còn select credits vì schema không có cột này
           },
         },
       },
     });
 
-    // Kiểm tra session còn hạn (nếu có expiresAt trong bảng Session)
     const notExpired =
       !session?.expiresAt || new Date(session.expiresAt).getTime() > Date.now();
 
-    if (session && session.user && notExpired) {
+    if (session?.user && notExpired) {
       me = {
         email: session.user.email,
         name: session.user.name,
         avatar: session.user.avatarUrl || null,
-        credits:
-          typeof session.user.credits === "number" ? session.user.credits : 0,
+        credits: 0, // mặc định 0 vì schema không có cột credits
       };
     }
   }
