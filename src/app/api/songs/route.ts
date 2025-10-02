@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/libs/prisma";
 import { getCurrentUser } from "@/libs/auth";
-import { mkdir, writeFile } from "fs/promises";
-import { extname } from "path";
 import type { Prisma } from "@prisma/client";
 
 export const runtime = "nodejs";
@@ -57,8 +55,8 @@ export async function GET(req: Request) {
     price: s.price,
     listens: s.listens,
     createdAt: s.createdAt,
-    previewPath: s.previewPath,
-    avatarPath: s.avatar ?? null, // 👈 thêm avatar
+    previewPath: s.previewPath,   // private path trong Supabase
+    avatarUrl: s.avatar ?? null,  // public URL Supabase (images bucket)
     genres: s.genres.map((g) => ({ id: g.id, name: g.name })),
     seller: s.seller
       ? { id: s.seller.id, email: s.seller.email, name: s.seller.name }
@@ -72,69 +70,54 @@ export async function GET(req: Request) {
 /** ---------------------- POST /api/songs ---------------------- */
 export async function POST(req: Request) {
   const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-
-  const form = await req.formData();
-  const title = String(form.get("title") || "").trim();
-  const description = String(form.get("description") || "").trim();
-  const priceStr = String(form.get("price") || "0").trim();
-  const genreIdsStr = String(form.get("genreIds") || "[]");
-
-  const preview = form.get("preview") as File | null;
-  const full = form.get("full") as File | null;
-  const avatar = form.get("avatar") as File | null; // 👈 thêm avatar field
-
-  if (!title || !preview || !full)
-    return NextResponse.json({ error: "missing required fields" }, { status: 400 });
-
-  const price = Number(priceStr);
-  if (Number.isNaN(price) || price < 0)
-    return NextResponse.json({ error: "invalid price" }, { status: 400 });
-
-  let genreIds: number[] = [];
-  try {
-    const parsed = JSON.parse(genreIdsStr);
-    if (Array.isArray(parsed)) {
-      genreIds = parsed.map((n: any) => Number(n)).filter(Number.isInteger);
-    }
-  } catch {}
-
-  const uploadsDir = process.cwd() + "/public/uploads";
-  await mkdir(uploadsDir, { recursive: true });
-
-  const pvExt = extname(preview.name || ".mp3") || ".mp3";
-  const flExt = extname(full.name || ".mp3") || ".mp3";
-  const avExt = avatar ? extname(avatar.name || ".jpg") || ".jpg" : null;
-
-  const pvName = `pv_${crypto.randomUUID()}${pvExt}`;
-  const flName = `full_${crypto.randomUUID()}${flExt}`;
-  const avName = avatar ? `av_${crypto.randomUUID()}${avExt}` : null;
-
-  const pvBuf = Buffer.from(await preview.arrayBuffer());
-  const flBuf = Buffer.from(await full.arrayBuffer());
-  await writeFile(`${uploadsDir}/${pvName}`, pvBuf);
-  await writeFile(`${uploadsDir}/${flName}`, flBuf);
-
-  if (avatar && avName) {
-    const avBuf = Buffer.from(await avatar.arrayBuffer());
-    await writeFile(`${uploadsDir}/${avName}`, avBuf);
+  if (!user) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const song = await prisma.song.create({
-    data: {
+  try {
+    const body = await req.json();
+    const {
       title,
-      description: description || null,
+      description,
       price,
-      previewPath: `/uploads/${pvName}`,
-      fullPath: `/uploads/${flName}`,
-      avatar: avName ? `/uploads/${avName}` : null, // 👈 save avatar
-      sellerId: user.id,
-      ...(genreIds.length
-        ? { genres: { connect: genreIds.map((id) => ({ id })) } }
-        : {}),
-    },
-    include: { genres: true, seller: { select: { id: true, email: true, name: true } } },
-  });
+      previewPath,
+      fullPath,
+      avatarUrl,
+      genreIds = [],
+    } = body;
 
-  return NextResponse.json(song, { status: 201 });
+    if (!title || !previewPath || !fullPath) {
+      return NextResponse.json(
+        { error: "missing required fields" },
+        { status: 400 }
+      );
+    }
+
+    const song = await prisma.song.create({
+      data: {
+        title,
+        description: description || null,
+        price: Number(price) || 0,
+        previewPath, // PATH trong bucket private
+        fullPath,    // PATH trong bucket private
+        avatar: avatarUrl || null, // public URL (ảnh)
+        sellerId: user.id,
+        ...(genreIds.length
+          ? { genres: { connect: genreIds.map((id: number) => ({ id })) } }
+          : {}),
+      },
+      include: {
+        genres: true,
+        seller: { select: { id: true, email: true, name: true } },
+      },
+    });
+
+    return NextResponse.json(song, { status: 201 });
+  } catch (err: any) {
+    console.error("POST /api/songs error:", err);
+    return NextResponse.json(
+      { error: err?.message || "server error" },
+      { status: 500 }
+    );
+  }
 }

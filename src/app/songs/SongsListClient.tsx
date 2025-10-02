@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Tabs from "@/components/Tabs";
 import LoginModal from "@/components/LoginModal";
 import PaymentQRModal from "@/components/PaymentQRModal";
-import toast from "react-hot-toast"; // 👈 thêm
+import toast from "react-hot-toast";
 
 type Genre = { id: number; name: string };
 type Seller = { id: number; email: string; name: string | null } | null;
@@ -18,7 +18,7 @@ type SongDTO = {
   genres: Genre[];
   seller: Seller;
   owned: boolean;
-  previewPath: string;
+  previewPath: string;   // path trong bucket private
   avatar?: string | null;
 };
 
@@ -47,6 +47,10 @@ export default function SongsListClient({
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
 
+  // streaming state
+  const [loadingStream, setLoadingStream] = useState(false);
+  const [streamError, setStreamError] = useState<string | null>(null);
+
   // modal login
   const [showLogin, setShowLogin] = useState(false);
 
@@ -59,21 +63,49 @@ export default function SongsListClient({
   const hasPrev = index !== null && index > 0;
   const hasNext = index !== null && index < songs.length - 1;
 
-  // chuyển bài
+  // chuyển bài → lấy signed URL preview và play
   useEffect(() => {
-    if (!current || !audioRef.current) return;
-    const a = audioRef.current;
-    const src = current.previewPath.startsWith("/")
-      ? current.previewPath
-      : `/${current.previewPath}`;
-    a.src = src;
-    a.load();
-    a
-      .play()
-      .then(() => setPlaying(true))
-      .catch(() => setPlaying(false));
-    fetch(`/api/songs/${current.id}/listen`, { method: "POST" }).catch(() => {});
-  }, [index, current?.id, current?.previewPath]);
+    let cancelled = false;
+
+    async function loadAndPlayPreview() {
+      if (!current || !audioRef.current) return;
+      setLoadingStream(true);
+      setStreamError(null);
+      const a = audioRef.current;
+
+      try {
+        const r = await fetch(`/api/songs/${current.id}/stream?kind=preview`, {
+          cache: "no-store",
+        });
+        if (!r.ok) {
+          const t = await r.text().catch(() => "");
+          throw new Error(`${r.status}:${t || "stream error"}`);
+        }
+        const data = await r.json();
+        const url = data?.url as string;
+        if (!url) throw new Error("missing url");
+
+        if (cancelled) return;
+        a.src = url;
+        a.load();
+        await a.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+        setLoadingStream(false);
+
+        // log listen
+        fetch(`/api/songs/${current.id}/listen`, { method: "POST" }).catch(() => {});
+      } catch (err: any) {
+        if (cancelled) return;
+        setLoadingStream(false);
+        setPlaying(false);
+        setStreamError(err?.message || "Stream failed");
+      }
+    }
+
+    loadAndPlayPreview();
+    return () => {
+      cancelled = true;
+    };
+  }, [index, current?.id]);
 
   // bind event
   useEffect(() => {
@@ -106,9 +138,7 @@ export default function SongsListClient({
   }
 
   async function reloadSongs() {
-    const res = await fetch("/api/songs?limit=100&offset=0", {
-      cache: "no-store",
-    });
+    const res = await fetch("/api/songs?limit=100&offset=0", { cache: "no-store" });
     const data = await res.json();
     setSongs(data.items);
   }
@@ -117,9 +147,9 @@ export default function SongsListClient({
   async function handlePaymentSuccess() {
     await reloadSongs(); // cập nhật owned=true
     toast.success("Mua thành công, Bạn vào Library để nghe nhé", {
-    duration: 6000, // 👈 hiển thị 6 giây
-     icon: "🎵",
-  });
+      duration: 6000,
+      icon: "🎵",
+    });
     setQrOpen(false); // đóng modal nếu còn mở
   }
 
@@ -160,9 +190,7 @@ export default function SongsListClient({
           margin: "0 auto",
           padding: "24px 16px",
           // chừa chỗ cho player + bottom nav mobile
-          paddingBottom: `calc(var(--bottom-nav-h, 0px) + ${
-            current ? PLAYER_H + 24 : 24
-          }px)`,
+          paddingBottom: `calc(var(--bottom-nav-h, 0px) + ${current ? PLAYER_H + 24 : 24}px)`,
           transition: "padding-bottom .2s ease",
         }}
       >
@@ -197,10 +225,7 @@ export default function SongsListClient({
             >
               {/* left: avatar + info */}
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <div
-                  className="cover"
-                  style={{ position: "relative", width: 56, height: 56 }}
-                >
+                <div className="cover" style={{ position: "relative", width: 56, height: 56 }}>
                   <img
                     src={s.avatar || "/default-avatar.png"}
                     alt={s.title}
@@ -239,8 +264,7 @@ export default function SongsListClient({
                 <div>
                   <div style={{ fontWeight: 700 }}>{s.title}</div>
                   <div style={{ color: "#9CA3AF", fontSize: 12, marginTop: 2 }}>
-                    {s.genres.map((g) => g.name).join(", ") || "—"} •{" "}
-                    {String(s.price)} • {s.listens} listens
+                    {s.genres.map((g) => g.name).join(", ") || "—"} • {String(s.price)} • {s.listens} listens
                   </div>
                 </div>
               </div>
@@ -291,9 +315,7 @@ export default function SongsListClient({
             }}
           >
             {/* LEFT */}
-            <div
-              style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}
-            >
+            <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
               <div
                 style={{
                   width: 52,
@@ -331,11 +353,7 @@ export default function SongsListClient({
                   }}
                 >
                   {current.seller?.name || current.seller?.email || "Anonymous"}{" "}
-                  &nbsp;|&nbsp;{" "}
-                  <span style={{ color: "#eee" }}>
-                    {formatTime(currentTime)}
-                  </span>{" "}
-                  / {formatTime(duration)}
+                  &nbsp;|&nbsp; <span style={{ color: "#eee" }}>{formatTime(currentTime)}</span> / {formatTime(duration)}
                 </div>
                 <input
                   type="range"
@@ -353,6 +371,12 @@ export default function SongsListClient({
                   title="Seek"
                   style={{ width: 360, accentColor: "#fff", height: 4, marginTop: 6 }}
                 />
+                {loadingStream && (
+                  <div style={{ fontSize: 12, color: "#bbb", marginTop: 6 }}>Loading audio…</div>
+                )}
+                {streamError && (
+                  <div style={{ fontSize: 12, color: "#f87171", marginTop: 6 }}>{streamError}</div>
+                )}
               </div>
             </div>
 
@@ -446,7 +470,7 @@ export default function SongsListClient({
         qrString={qrString}
         sessionId={paymentSessionId}
         onClose={() => setQrOpen(false)}
-        onSuccess={handlePaymentSuccess} // 👈 show toast + reload
+        onSuccess={handlePaymentSuccess} // show toast + reload
       />
 
       <style jsx>{`

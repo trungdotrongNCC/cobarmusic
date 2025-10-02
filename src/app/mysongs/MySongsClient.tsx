@@ -15,7 +15,7 @@ type SongDTO = {
   genres: Genre[];
   seller: Seller;
   owned: boolean;
-  playUrl: string;
+  playUrl: string;          // không dùng trực tiếp nữa, sẽ gọi /stream
   avatar?: string | null;
 };
 
@@ -40,20 +40,66 @@ export default function SongsListClient({ initialSongs }: { initialSongs: SongDT
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
 
+  const [loadingStream, setLoadingStream] = useState(false);
+  const [streamError, setStreamError] = useState<string | null>(null);
+
   const current = index !== null ? songs[index] : null;
   const hasPrev = index !== null && index > 0;
   const hasNext = index !== null && index < songs.length - 1;
 
-  // chuyển bài
+  // Lấy signed URL và phát bài
   useEffect(() => {
-    if (!current || !audioRef.current) return;
-    const a = audioRef.current;
-    const src = current.playUrl.startsWith("/") ? current.playUrl : `/${current.playUrl}`;
-    a.src = src;
-    a.load();
-    a.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
-    fetch(`/api/songs/${current.id}/listen`, { method: "POST" }).catch(() => {});
-  }, [index, current?.id, current?.playUrl]);
+    let cancelled = false;
+    async function loadAndPlay() {
+      if (!current || !audioRef.current) return;
+      setLoadingStream(true);
+      setStreamError(null);
+      const a = audioRef.current;
+
+      // helper fetch signed url
+      async function getSigned(kind: "full" | "preview") {
+        const r = await fetch(`/api/songs/${current.id}/stream?kind=${kind}`, { cache: "no-store" });
+        if (!r.ok) {
+          const errText = await r.text().catch(() => "");
+          throw new Error(`${r.status}:${errText || "stream error"}`);
+        }
+        const data = await r.json();
+        if (!data?.url) throw new Error("missing url");
+        return data.url as string;
+      }
+
+      try {
+        // Ưu tiên full (vì Library = đã mua). Nếu lỗi quyền/khác → fallback preview
+        let url: string;
+        try {
+          url = await getSigned("full");
+        } catch (e) {
+          // nếu lỗi 401/403/404 thì thử preview
+          url = await getSigned("preview");
+        }
+        if (cancelled) return;
+
+        a.src = url;
+        a.load();
+        await a.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+        setLoadingStream(false);
+
+        // log listen
+        fetch(`/api/songs/${current.id}/listen`, { method: "POST" }).catch(() => {});
+      } catch (err: any) {
+        if (cancelled) return;
+        setLoadingStream(false);
+        setPlaying(false);
+        setStreamError(err?.message || "Stream failed");
+      }
+    }
+
+    loadAndPlay();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [index, current?.id]);
 
   // bind event
   useEffect(() => {
@@ -107,7 +153,7 @@ export default function SongsListClient({ initialSongs }: { initialSongs: SongDT
           ]}
         />
 
-        {/* List các bài đã sở hữu (không có nút Buy) */}
+        {/* List các bài đã sở hữu */}
         <div style={{ display: "grid", gap: 12 }}>
           {songs.map((s, i) => (
             <div
@@ -223,20 +269,58 @@ export default function SongsListClient({ initialSongs }: { initialSongs: SongDT
                   title="Seek"
                   style={{ width: 360, accentColor: "#fff", height: 4, marginTop: 6 }}
                 />
+                {loadingStream && (
+                  <div style={{ fontSize: 12, color: "#bbb", marginTop: 6 }}>Loading audio…</div>
+                )}
+                {streamError && (
+                  <div style={{ fontSize: 12, color: "#f87171", marginTop: 6 }}>{streamError}</div>
+                )}
               </div>
             </div>
 
             {/* CENTER */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 22 }}>
-              <button onClick={() => hasPrev && setIndex((i) => (i === null ? 0 : i - 1))} disabled={!hasPrev}
-                title="Prev" style={{ fontSize: 24, background: "none", border: "none", color: "#fff", cursor: hasPrev ? "pointer" : "not-allowed", opacity: hasPrev ? 1 : 0.4 }}>
+              <button
+                onClick={() => hasPrev && setIndex((i) => (i === null ? 0 : i - 1))}
+                disabled={!hasPrev}
+                title="Prev"
+                style={{
+                  fontSize: 24,
+                  background: "none",
+                  border: "none",
+                  color: "#fff",
+                  cursor: hasPrev ? "pointer" : "not-allowed",
+                  opacity: hasPrev ? 1 : 0.4,
+                }}
+              >
                 ⏮
               </button>
-              <button onClick={togglePlay} title={playing ? "Pause" : "Play"} style={{ fontSize: 28, background: "none", border: "none", color: "#fff", cursor: "pointer" }}>
+              <button
+                onClick={togglePlay}
+                title={playing ? "Pause" : "Play"}
+                style={{
+                  fontSize: 28,
+                  background: "none",
+                  border: "none",
+                  color: "#fff",
+                  cursor: "pointer",
+                }}
+              >
                 {playing ? "⏸" : "▶"}
               </button>
-              <button onClick={() => hasNext && setIndex((i) => (i === null ? 0 : i + 1))} disabled={!hasNext}
-                title="Next" style={{ fontSize: 24, background: "none", border: "none", color: "#fff", cursor: hasNext ? "pointer" : "not-allowed", opacity: hasNext ? 1 : 0.4 }}>
+              <button
+                onClick={() => hasNext && setIndex((i) => (i === null ? 0 : i + 1))}
+                disabled={!hasNext}
+                title="Next"
+                style={{
+                  fontSize: 24,
+                  background: "none",
+                  border: "none",
+                  color: "#fff",
+                  cursor: hasNext ? "pointer" : "not-allowed",
+                  opacity: hasNext ? 1 : 0.4,
+                }}
+              >
                 ⏭
               </button>
             </div>
