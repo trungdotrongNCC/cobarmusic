@@ -1,17 +1,19 @@
+// app/api/songs/[id]/stream/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/libs/prisma";
 import { getCurrentUser } from "@/libs/auth";
 import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
+// Nếu dùng app router caching: luôn động để không cache user permissions
+export const dynamic = "force-dynamic";
 
-// Có thể đổi qua ENV nếu muốn: MUSIC_BUCKET
+// Đổi qua ENV nếu muốn
 const AUDIO_BUCKET = process.env.MUSIC_BUCKET || "music";
 
-/**
- * GET /api/songs/:id/stream?kind=preview|full
- * Trả { url } là signed URL (Supabase) có hạn (mặc định 10 phút)
- */
+// TTL của signed URL (giây)
+const SIGNED_TTL = Number(process.env.SIGNED_URL_EXPIRES || 600);
+
 export async function GET(
   req: Request,
   { params }: { params: { id: string } }
@@ -19,26 +21,20 @@ export async function GET(
   try {
     const url = new URL(req.url);
     const kind = (url.searchParams.get("kind") || "preview").toLowerCase(); // preview | full
+
     const songId = Number(params.id);
     if (!Number.isFinite(songId)) {
       return NextResponse.json({ error: "invalid id" }, { status: 400 });
     }
 
-    // Lấy song (lấy path + sellerId)
+    // Lấy song (path + seller)
     const song = await prisma.song.findUnique({
       where: { id: songId },
-      select: {
-        id: true,
-        sellerId: true,
-        previewPath: true,
-        fullPath: true,
-      },
+      select: { id: true, sellerId: true, previewPath: true, fullPath: true },
     });
+    if (!song) return NextResponse.json({ error: "song not found" }, { status: 404 });
 
-    if (!song) {
-      return NextResponse.json({ error: "song not found" }, { status: 404 });
-    }
-
+    // Quyết định objectPath và kiểm quyền nếu nghe full
     let objectPath: string | null = null;
 
     if (kind === "preview") {
@@ -52,22 +48,20 @@ export async function GET(
         return NextResponse.json({ error: "full not available" }, { status: 404 });
       }
 
-      // Kiểm tra quyền nghe full: đã mua, là seller, hoặc admin
-      const me = await getCurrentUser(); // đảm bảo hàm này trả { id, role? }
-      if (!me) {
-        return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-      }
+      // Kiểm quyền: người mua, seller, hoặc admin
+      const me = await getCurrentUser();
+      if (!me) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
       const isSeller = me.id === song.sellerId;
-      const isAdmin = (me as any).role === "admin";
+      const isAdmin = (me as any)?.role === "admin";
 
       let isOwner = false;
       if (!isSeller && !isAdmin) {
-        const purchase = await prisma.purchase.findFirst({
+        const purchased = await prisma.purchase.findFirst({
           where: { userId: me.id, songId: song.id },
           select: { id: true },
         });
-        isOwner = !!purchase;
+        isOwner = !!purchased;
       }
 
       if (!(isSeller || isAdmin || isOwner)) {
@@ -77,38 +71,35 @@ export async function GET(
       return NextResponse.json({ error: "invalid kind" }, { status: 400 });
     }
 
-    // Tạo signed URL bằng Service Role (server-only)
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const serviceRole = process.env.SUPABASE_SERVICE_ROLE!;
-    if (!supabaseUrl || !serviceRole) {
-      return NextResponse.json(
-        { error: "supabase env missing" },
-        { status: 500 }
-      );
+    // ENV Supabase
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    // Tên thường dùng là SUPABASE_SERVICE_ROLE_KEY; hỗ trợ cả 2 để linh hoạt.
+    const serviceRoleKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return NextResponse.json({ error: "supabase env missing" }, { status: 500 });
     }
 
-    const sb = createClient(supabaseUrl, serviceRole);
-    // thời hạn 10 phút (600s) — bạn đổi theo ý muốn
-    const expiresIn = Number(process.env.SIGNED_URL_EXPIRES || 600);
+    // Server-side client với service role để ký URL bucket private
+    const sb = createClient(supabaseUrl, serviceRoleKey);
+
+    // Chuẩn hóa path (loại bỏ slash đầu nếu có)
+    const normalizedPath = String(objectPath).replace(/^\/+/, "");
 
     const { data, error } = await sb.storage
       .from(AUDIO_BUCKET)
-      .createSignedUrl(objectPath!, expiresIn);
+      .createSignedUrl(normalizedPath, SIGNED_TTL);
 
     if (error || !data?.signedUrl) {
       console.error("[stream] createSignedUrl error:", error);
-      return NextResponse.json(
-        { error: "failed to sign url" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "failed to sign url" }, { status: 500 });
     }
 
+    // Trả về URL cho <audio src=...>
     return NextResponse.json({ url: data.signedUrl });
   } catch (e: any) {
-    console.error("GET /api/songs/[id]/stream", e);
-    return NextResponse.json(
-      { error: e?.message || "server error" },
-      { status: 500 }
-    );
+    console.error("GET /api/songs/[id]/stream error:", e);
+    return NextResponse.json({ error: e?.message || "server error" }, { status: 500 });
   }
 }
