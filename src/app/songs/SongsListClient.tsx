@@ -63,15 +63,40 @@ export default function SongsListClient({
   const hasPrev = index !== null && index > 0;
   const hasNext = index !== null && index < songs.length - 1;
 
-  // chuyển bài → lấy signed URL preview và play
+  // ===== LẤY SIGNED URL VÀ PHÁT NHẠC (Supabase) =====
   useEffect(() => {
     let cancelled = false;
 
     async function loadAndPlayPreview() {
       if (!current || !audioRef.current) return;
+
+      const a = audioRef.current;
+
+      // reset nguồn cũ để tránh race condition khi đổi bài nhanh
+      a.pause();
+      a.removeAttribute("src");
+      a.load();
+
+      setPlaying(false);
       setLoadingStream(true);
       setStreamError(null);
-      const a = audioRef.current;
+      setDuration(0);
+      setCurrentTime(0);
+
+      // bắt lỗi phần tử <audio>
+      const onAudioError = () => {
+        if (cancelled) return;
+        const code = a.error?.code;
+        const msg =
+          code === 1 ? "ABORTED" :
+          code === 2 ? "NETWORK" :
+          code === 3 ? "DECODE" :
+          code === 4 ? "SRC_NOT_SUPPORTED" : "UNKNOWN";
+        setStreamError(`Audio error: ${msg}`);
+        setLoadingStream(false);
+        setPlaying(false);
+      };
+      a.addEventListener("error", onAudioError);
 
       try {
         const r = await fetch(`/api/songs/${current.id}/stream?kind=preview`, {
@@ -86,18 +111,41 @@ export default function SongsListClient({
         if (!url) throw new Error("missing url");
 
         if (cancelled) return;
+
+        // gán nguồn mới và thiết lập CORS
+        a.crossOrigin = "anonymous";
         a.src = url;
-        a.load();
-        await a.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+
+        // đợi có thể phát (metadata sẵn sàng)
+        await new Promise<void>((resolve, reject) => {
+          const onCanPlay = () => {
+            a.removeEventListener("canplay", onCanPlay);
+            resolve();
+          };
+          const onErr = () => {
+            a.removeEventListener("canplay", onCanPlay);
+            reject(a.error);
+          };
+          a.addEventListener("canplay", onCanPlay, { once: true });
+          a.addEventListener("error", onErr, { once: true });
+          a.load();
+        });
+
+        if (cancelled) return;
+
+        await a.play();
+        setPlaying(true);
         setLoadingStream(false);
 
-        // log listen
+        // log lượt nghe (không chặn UI)
         fetch(`/api/songs/${current.id}/listen`, { method: "POST" }).catch(() => {});
       } catch (err: any) {
         if (cancelled) return;
+        setStreamError(err?.message || "Stream failed");
         setLoadingStream(false);
         setPlaying(false);
-        setStreamError(err?.message || "Stream failed");
+      } finally {
+        a.removeEventListener("error", onAudioError);
       }
     }
 
@@ -107,7 +155,7 @@ export default function SongsListClient({
     };
   }, [index, current?.id]);
 
-  // bind event
+  // ===== RÀNG BUỘC SỰ KIỆN AUDIO =====
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
@@ -352,8 +400,8 @@ export default function SongsListClient({
                     overflow: "hidden",
                   }}
                 >
-                  {current.seller?.name || current.seller?.email || "Anonymous"}{" "}
-                  &nbsp;|&nbsp; <span style={{ color: "#eee" }}>{formatTime(currentTime)}</span> / {formatTime(duration)}
+                  {current.seller?.name || current.seller?.email || "Anonymous"}&nbsp;|&nbsp;
+                  <span style={{ color: "#eee" }}>{formatTime(currentTime)}</span> / {formatTime(duration)}
                 </div>
                 <input
                   type="range"
@@ -453,7 +501,8 @@ export default function SongsListClient({
             </div>
           </div>
 
-          <audio ref={audioRef} />
+          {/* Thêm crossOrigin để stream Supabase mượt hơn */}
+          <audio ref={audioRef} crossOrigin="anonymous" />
         </div>
       )}
 
