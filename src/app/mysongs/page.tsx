@@ -33,6 +33,7 @@ export default async function MySongsPage() {
       title: s.title,
       description: s.description,
       price: s.price.toString(),
+      avatar: s.avatar,
       listens: s.listens,
       createdAt: s.createdAt.toISOString(),
       genres: s.genres.map((g) => ({ id: g.id, name: g.name })),
