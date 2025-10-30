@@ -25,9 +25,9 @@ type SongDTO = {
   genres: Genre[];
   seller: Seller;
   owned: boolean;
-  previewPath: string;       // path gốc (không dùng trực tiếp — backend sẽ ký URL)
+  previewPath: string;       // path gốc (backend sẽ ký URL)
   avatar?: string | null;
-  fullPath?: string | null;  // chỉ có khi owned (không bắt buộc phải dùng)
+  fullPath?: string | null;  // chỉ có khi owned
   comments?: CommentDTO[];
 };
 
@@ -331,7 +331,13 @@ export default function SongDetailsClient({ initialSong }: { initialSong: SongDT
 
   // ===== Render =====
   return (
-    <div>
+    <div
+      style={{
+        // chừa chỗ cho bottom menu + player
+        paddingBottom: `calc(var(--bottom-nav-h, 0px) + ${PLAYER_H}px)`,
+        transition: "padding-bottom .2s ease",
+      }}
+    >
       {/* HEADER CARD */}
       <div
         style={{
@@ -401,80 +407,82 @@ export default function SongDetailsClient({ initialSong }: { initialSong: SongDT
         </div>
       </div>
 
-      {/* LYRIC */}
-      {song.lyric && (
-        <div
+      {/* BODY: lyric + comments (responsive) */}
+      <div className="detail-body">
+        {/* LYRIC */}
+        {song.lyric && (
+          <section
+            className="lyric-card"
+            style={{
+              border: "1px solid #222",
+              borderRadius: 12,
+              background: "#111",
+              padding: 16,
+              whiteSpace: "pre-wrap",
+              lineHeight: 1.6,
+              color: "#eee",
+              fontFamily:
+                'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+            }}
+          >
+            {song.lyric}
+          </section>
+        )}
+
+        {/* COMMENTS */}
+        <aside
+          className="comments-card"
           style={{
             border: "1px solid #222",
             borderRadius: 12,
             background: "#111",
             padding: 16,
-            marginTop: 16,
-            whiteSpace: "pre-wrap",
-            lineHeight: 1.6,
-            color: "#eee",
-            fontFamily:
-              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
           }}
         >
-          {song.lyric}
-        </div>
-      )}
+          <h3 style={{ fontWeight: 600, fontSize: 18, marginBottom: 12 }}>Comments</h3>
 
-      {/* COMMENTS */}
-      <div
-        style={{
-          border: "1px solid #222",
-          borderRadius: 12,
-          background: "#111",
-          padding: 16,
-          marginTop: 16,
-        }}
-      >
-        <h3 style={{ fontWeight: 600, fontSize: 18, marginBottom: 12 }}>Comments</h3>
+          {song.comments?.length ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {song.comments.map((c) => (
+                <div key={c.id} style={{ borderBottom: "1px solid #222", paddingBottom: 8 }}>
+                  <div style={{ color: "#9CA3AF", fontSize: 13 }}>
+                    {c.user?.name || "Anonymous"} — {new Date(c.createdAt).toLocaleString("vi-VN")}
+                  </div>
+                  <div style={{ color: "#fff", marginTop: 4, whiteSpace: "pre-wrap" }}>
+                    {c.content}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ color: "#999", fontStyle: "italic" }}>No comments yet!</p>
+          )}
 
-        {song.comments?.length ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {song.comments.map((c) => (
-              <div key={c.id} style={{ borderBottom: "1px solid #222", paddingBottom: 8 }}>
-                <div style={{ color: "#9CA3AF", fontSize: 13 }}>
-                  {c.user?.name || "Anonymous"} —{" "}
-                  {new Date(c.createdAt).toLocaleString("vi-VN")}
-                </div>
-                <div style={{ color: "#fff", marginTop: 4, whiteSpace: "pre-wrap" }}>
-                  {c.content}
-                </div>
-              </div>
-            ))}
+          <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+            <input
+              value={commentValue}
+              onChange={(e) => setCommentValue(e.target.value)}
+              placeholder="Write a comment..."
+              style={{
+                flex: 1,
+                padding: "10px 12px",
+                borderRadius: 8,
+                border: "1px solid #333",
+                background: "#0a0a0a",
+                color: "#fff",
+                outline: "none",
+              }}
+            />
+            <button
+              onClick={submitComment}
+              className="buy-btn"
+              title="Post comment"
+              style={{ padding: "10px 14px" }}
+            >
+              Post
+            </button>
           </div>
-        ) : (
-          <p style={{ color: "#999", fontStyle: "italic" }}>No comments yet!</p>
-        )}
-
-        <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-          <input
-            value={commentValue}
-            onChange={(e) => setCommentValue(e.target.value)}
-            placeholder="Write a comment..."
-            style={{
-              flex: 1,
-              padding: "10px 12px",
-              borderRadius: 8,
-              border: "1px solid #333",
-              background: "#0a0a0a",
-              color: "#fff",
-              outline: "none",
-            }}
-          />
-          <button
-            onClick={submitComment}
-            className="buy-btn"
-            title="Post comment"
-            style={{ padding: "10px 14px" }}
-          >
-            Post
-          </button>
-        </div>
+        </aside>
       </div>
 
       {/* GLOBAL BOTTOM PLAYER */}
@@ -483,7 +491,7 @@ export default function SongDetailsClient({ initialSong }: { initialSong: SongDT
           position: "fixed",
           left: 0,
           right: 0,
-          bottom: 0,
+          bottom: "var(--bottom-nav-h, 0px)", // nằm trên bottom menu
           height: PLAYER_H,
           background: "#171717",
           borderTop: "1px solid #262626",
@@ -501,7 +509,7 @@ export default function SongDetailsClient({ initialSong }: { initialSong: SongDT
             padding: "12px 16px",
           }}
         >
-          {/* LEFT: thumbnail + meta */}
+          {/* LEFT: thumb + meta + seek */}
           <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
             <div
               style={{
@@ -540,8 +548,7 @@ export default function SongDetailsClient({ initialSong }: { initialSong: SongDT
                 }}
               >
                 {song.seller?.name || song.seller?.email || "Anonymous"}&nbsp;|&nbsp;
-                <span style={{ color: "#eee" }}>{formatTime(currentTime)}</span> /{" "}
-                {formatTime(duration)}
+                <span style={{ color: "#eee" }}>{formatTime(currentTime)}</span> / {formatTime(duration)}
               </div>
               <input
                 type="range"
@@ -633,12 +640,14 @@ export default function SongDetailsClient({ initialSong }: { initialSong: SongDT
           cursor: pointer;
           white-space: nowrap;
         }
-        .buy-btn:hover {
-          filter: brightness(1.05);
-          box-shadow: 0 8px 22px rgba(133, 92, 255, 0.5);
-        }
-        .buy-btn:active {
-          transform: translateY(1px);
+        .buy-btn:hover { filter: brightness(1.05); box-shadow: 0 8px 22px rgba(133, 92, 255, 0.5); }
+        .buy-btn:active { transform: translateY(1px); }
+
+        /* Layout lyric + comments */
+        .detail-body { display: grid; gap: 16px; margin-top: 16px; }
+        /* Desktop: 2 cột (lyric rộng, comments hẹp) */
+        @media (min-width: 1024px) {
+          .detail-body { grid-template-columns: 1fr 420px; align-items: start; }
         }
       `}</style>
 

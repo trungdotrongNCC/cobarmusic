@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 
 import { useEffect, useRef, useState } from "react";
 import Tabs from "@/components/Tabs";
@@ -401,12 +402,23 @@ export default function SongsListClient({ initialSongs }: { initialSongs: SongDT
                   </div>
 
                   <div>
-                    <div style={{ fontWeight: 700 }}>{s.title}</div>
-                    <div style={{ color: "#9CA3AF", fontSize: 12, marginTop: 2 }}>
-                      {/* BỎ giá ở đây: chỉ còn genres • listens */}
-                      {s.genres.map((g) => g.name).join(", ") || "—"} • {s.listens} listens
-                    </div>
-                  </div>
+                    <Link
+  href={`/songs/${s.id}`}
+  style={{
+    fontWeight: 700,
+    color: "#fff",
+    cursor: "pointer",
+    textDecoration: "none",
+  }}
+  onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+  onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+>
+  {s.title}
+</Link>
+                  <div style={{ color: "#9CA3AF", fontSize: 12, marginTop: 2 }}>
+                     {s.genres.map((g) => g.name).join(", ") || "—"} • {s.listens} listens
+                   </div>
+                </div>
                 </div>
 
                 {/* right: Give Coffee (gradient + có giá) */}
@@ -432,7 +444,7 @@ export default function SongsListClient({ initialSongs }: { initialSongs: SongDT
             position: "fixed",
             left: "var(--sidebar-w)" as any,
             right: 0,
-            bottom: 0,
+            bottom: "var(--bottom-nav-h, 0px)",
             height: PLAYER_H,
             background: "#171717",
             borderTop: "1px solid #262626",
@@ -588,7 +600,11 @@ export default function SongsListClient({ initialSongs }: { initialSongs: SongDT
           50%  { transform: scaleY(1); }
           100% { transform: scaleY(0.35); }
         }
-
+        .song-title-link:hover {
+        text-decoration: underline;
+         text-decoration-thickness: 1px;
+         text-underline-offset: 2px;
+        }
         /* Give Coffee gradient like login */
         .buy-btn {
           appearance: none;

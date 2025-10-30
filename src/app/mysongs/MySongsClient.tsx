@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Tabs from "@/components/Tabs";
-
+import Link from "next/link";
 type Genre = { id: number; name: string };
 type Seller = { id: number; email: string; name: string | null } | null;
 type SongDTO = {
@@ -371,9 +371,21 @@ export default function SongsListClient({ initialSongs }: { initialSongs: SongDT
                     </button>
                   </div>
 
-                  <div>
-                    <div style={{ fontWeight: 700 }}>{s.title}</div>
-                    <div style={{ color: "#9CA3AF", fontSize: 12, marginTop: 2 }}>
+                  <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                    <Link
+  href={`/songs/${s.id}`}
+  style={{
+    fontWeight: 700,
+    color: "#fff",
+    cursor: "pointer",
+    textDecoration: "none",
+  }}
+  onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+  onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+>
+  {s.title}
+                    </Link>
+                    <div style={{ color: "#9CA3AF", fontSize: 12, marginTop: 6 }}>
                       {s.genres.map((g) => g.name).join(", ") || "—"} • {s.listens} listens
                     </div>
                   </div>
@@ -543,6 +555,11 @@ export default function SongsListClient({ initialSongs }: { initialSongs: SongDT
         }
 
         /* Repeat button styling */
+        .song-title-link:hover {
+          text-decoration: underline;
+          text-decoration-thickness: 1px;
+          text-underline-offset: 2px;
+        }
         .repeat-btn {
           position: relative;
           background: none;
