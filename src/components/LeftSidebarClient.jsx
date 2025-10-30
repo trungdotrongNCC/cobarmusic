@@ -61,12 +61,12 @@ export default function LeftSidebarClient({ me }) {
       <nav className="px-4 mt-2 space-y-3">
         <Link href="/" className={itemCls(isMarket)}>
           <ShoppingBag className="w-5 h-5 mr-3" />
-          <span>Marketplace</span>
+          <span>Cobar Shop</span>
         </Link>
 
         <Link href="/mysongs" className={itemCls(isLibrary)}>
           <BookOpen className="w-5 h-5 mr-3" />
-          <span>Library</span>
+          <span>Thư viện</span>
         </Link>
 
         {/* Chỉ hiện Sign out khi đã login */}

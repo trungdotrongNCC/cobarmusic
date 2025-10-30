@@ -101,7 +101,7 @@ export default function PaymentQRModal({
       >
         <h3 className="text-lg font-semibold mb-2">Scan to Pay</h3>
         <p className="text-sm text-gray-300 mb-4">
-          NCC8 yêu bạn iu rất nhiều.
+          Quẹt Mezon lẹ lẹ rồi vô thư viện chill nha. NCC8 nhớ bạn ghê á!
         </p>
 
         <div

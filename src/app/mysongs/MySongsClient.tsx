@@ -301,7 +301,9 @@ export default function SongsListClient({ initialSongs }: { initialSongs: SongDT
         }}
       >
         {/* Title + Tabs */}
-        <h1 className="text-3xl md:text-[42px] font-semibold tracking-tight mb-3">Library</h1>
+        <h1 className="text-3xl md:text-[42px] font-extrabold tracking-tight mb-3 text-yellow-400 animate-bounce">
+  LIBRARY
+</h1>
         <Tabs
           className="mb-6"
           tabs={[

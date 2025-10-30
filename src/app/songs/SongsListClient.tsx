@@ -337,7 +337,12 @@ export default function SongsListClient({ initialSongs }: { initialSongs: SongDT
           transition: "padding-bottom .2s ease",
         }}
       >
-        <h1 className="text-3xl md:text-[42px] font-semibold tracking-tight mb-3">Marketplace</h1>
+        <h1 className="text-3xl md:text-[42px] font-extrabold tracking-tight mb-3 text-yellow-400 animate-bounce">
+  Cobar Music Shop
+</h1>
+        <p className="text-sm text-[#a084ff] font-semibold animate-pulse">
+  Quẹt Mezon ở Cobar Shop xong, nhớ ghé thư viện nghe nhạc full chill nha!
+</p>
         <Tabs className="mb-6" tabs={[{ label: "Songs", href: "/" }, { label: "Playlists", comingSoon: true }]} />
 
         {/* List */}
