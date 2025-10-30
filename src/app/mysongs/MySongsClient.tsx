@@ -405,7 +405,7 @@ export default function SongsListClient({ initialSongs }: { initialSongs: SongDT
             position: "fixed",
             left: "var(--sidebar-w)" as any,
             right: 0,
-            bottom: 0,
+            bottom: "var(--bottom-nav-h, 0px)",
             height: PLAYER_H,
             background: "#171717",
             borderTop: "1px solid #262626",
