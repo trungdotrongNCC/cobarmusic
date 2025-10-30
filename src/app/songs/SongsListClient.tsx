@@ -337,7 +337,7 @@ export default function SongsListClient({ initialSongs }: { initialSongs: SongDT
           transition: "padding-bottom .2s ease",
         }}
       >
-        <h1 className="text-3xl md:text-[42px] font-extrabold tracking-tight mb-3 text-yellow-400 animate-bounce">
+       <h1 className="text-3xl md:text-[42px] font-extrabold tracking-tight mb-3 text-[#9b5cff] animate-bounce">
   Cobar Music Shop
 </h1>
         <p className="text-sm text-[#a084ff] font-semibold animate-pulse">
