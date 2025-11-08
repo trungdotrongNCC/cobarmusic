@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 export const SESSION_COOKIE = "session";
 
 export async function getCurrentUser() {
-  const token = cookies().get(SESSION_COOKIE)?.value;
+  const store = await cookies();
+  const token = store.get(SESSION_COOKIE)?.value;
   if (!token) return null;
 
   const session = await prisma.session.findUnique({

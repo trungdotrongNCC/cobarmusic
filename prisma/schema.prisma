@@ -9,9 +9,10 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
+
 
 model User {
   id              Int              @id @default(autoincrement())
@@ -53,7 +54,7 @@ model Song {
   fullPath        String
   description     String?
   lyric           String?
-  price           Decimal          @db.Decimal(10, 2)
+  price           Decimal
   listens         Int              @default(0)
   purchases       Purchase[] // người mua
   avatar          String?
@@ -71,7 +72,7 @@ model Purchase {
   id          Int      @id @default(autoincrement())
   userId      Int
   songId      Int
-  priceAtBuy  Decimal  @db.Decimal(10, 2)
+  priceAtBuy  Decimal
   purchasedAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -7,7 +7,8 @@ import LeftSidebarClient from "./LeftSidebarClient";
 export const runtime = "nodejs";
 
 export default async function LeftSidebar() {
-  const token = cookies().get(SESSION_COOKIE)?.value || null;
+  const store = await cookies();
+  const token = store.get(SESSION_COOKIE)?.value || null;
 
   let me = null;
   if (token) {
