@@ -4,14 +4,15 @@ export const metadata: Metadata = {
   title: "Sign in – Cobar Music",
 };
 
-export default function LoginPage({
+export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: { next?: string; redirect?: string };
+  searchParams: Promise<{ next?: string; redirect?: string }>;
 }) {
+  const params = await searchParams;
   const back =
-    (searchParams?.next && searchParams.next.startsWith("/") && searchParams.next) ||
-    (searchParams?.redirect && searchParams.redirect.startsWith("/") && searchParams.redirect) ||
+    (params?.next && params.next.startsWith("/") && params.next) ||
+    (params?.redirect && params.redirect.startsWith("/") && params.redirect) ||
     "/";
 
   return (
@@ -23,10 +24,10 @@ export default function LoginPage({
         </p>
 
         <a
-          href={`/api/auth/google/start?redirect=${encodeURIComponent(back)}`}
+          href={`/api/auth/mezon/start?redirect=${encodeURIComponent(back)}`}
           className="block w-full text-center py-3 rounded-lg text-white bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 font-medium"
         >
-          Login with Google
+          Login with Mezon
         </a>
       </div>
     </div>
