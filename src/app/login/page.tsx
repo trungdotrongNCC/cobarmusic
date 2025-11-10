@@ -26,7 +26,7 @@ export default function LoginPage({
           href={`/api/auth/google/start?redirect=${encodeURIComponent(back)}`}
           className="block w-full text-center py-3 rounded-lg text-white bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 font-medium"
         >
-          Login with Google
+          Login with Mezon
         </a>
       </div>
     </div>

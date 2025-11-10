@@ -20,8 +20,9 @@ export async function GET(req: Request) {
     // 2) Lấy thông tin user từ Google (đã scope email/profile)
     const info = await getGoogleUserInfo(tok.access_token);
     const email = info.email ?? `google_${info.sub}@example.invalid`;
-    const name = info.name || email.split("@")[0];
-    const avatarUrl = info.picture ?? null;
+    const name = info.display_name || email.split("@")[0];
+    // const avatarUrl = info.picture ?? null;
+    const avatarUrl = null;
 
     // 3) Upsert user theo email (=> chắc chắn có user trong DB sau login)
     //    YÊU CẦU: model User phải có unique trên email
