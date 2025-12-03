@@ -3,7 +3,13 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ShoppingBag, BookOpen, LogOut, UserRound } from "lucide-react";
+import {
+  ShoppingBag,
+  BookOpen,
+  LogOut,
+  UserRound,
+  QrCode, // icon cho QR
+} from "lucide-react";
 
 export default function LeftSidebarClient({ me }) {
   const pathname = usePathname();
@@ -18,6 +24,7 @@ export default function LeftSidebarClient({ me }) {
 
   const isMarket = pathname === "/" || pathname.startsWith("/songs");
   const isLibrary = pathname.startsWith("/mysongs");
+  const isQr = pathname.startsWith("/qr");
 
   const isLoggedIn = !!(me && (me.email || me.name));
 
@@ -26,7 +33,9 @@ export default function LeftSidebarClient({ me }) {
     router.push("/login");
   }
 
-  const displayName = isLoggedIn ? me.email || me.name || "User" : "Welcome CobarFan";
+  const displayName = isLoggedIn
+    ? me.email || me.name || "User"
+    : "Welcome CobarFan";
   const credits = isLoggedIn ? me.credits ?? 0 : 0;
 
   return (
@@ -67,6 +76,11 @@ export default function LeftSidebarClient({ me }) {
         <Link href="/mysongs" className={itemCls(isLibrary)}>
           <BookOpen className="w-5 h-5 mr-3" />
           <span>Thư viện</span>
+        </Link>
+
+        <Link href="/qr" className={itemCls(isQr)}>
+          <QrCode className="w-5 h-5 mr-3" />
+          <span>QR Generator</span>
         </Link>
 
         {/* Chỉ hiện Sign out khi đã login */}
