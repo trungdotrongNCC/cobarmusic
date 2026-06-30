@@ -6,8 +6,6 @@ export const runtime = "nodejs";
 
 const AUDIO_BUCKET = process.env.MUSIC_BUCKET || "music";
 const IMAGE_BUCKET = "images";
-const MAX_AUDIO = 50 * 1024 * 1024; // 50 MB
-const MAX_IMAGE = 5 * 1024 * 1024;  // 5 MB
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -15,48 +13,37 @@ function getServiceClient() {
   return createClient(url, key);
 }
 
+// POST /api/upload
+// Body: { filename: string, type: "audio" | "image" }
+// Returns: { signedUrl, path, publicUrl? }
+// Browser then uploads the file directly to signedUrl (PUT)
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const form = await req.formData();
-  const file = form.get("file") as File | null;
-  const type = (form.get("type") as string) || "audio"; // "audio" | "image"
+  const { filename, type = "audio" } = await req.json();
+  if (!filename) return NextResponse.json({ error: "filename required" }, { status: 400 });
 
-  if (!file) return NextResponse.json({ error: "no file" }, { status: 400 });
-
-  const maxSize = type === "image" ? MAX_IMAGE : MAX_AUDIO;
-  if (file.size > maxSize) {
-    return NextResponse.json(
-      { error: `File too large. Max: ${Math.round(maxSize / 1024 / 1024)}MB` },
-      { status: 413 }
-    );
-  }
-
-  const ext = file.name.split(".").pop() || "bin";
+  const ext = String(filename).split(".").pop() || "bin";
   const key = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const bucket = type === "image" ? IMAGE_BUCKET : AUDIO_BUCKET;
   const prefix = type === "image" ? "avatars" : "full";
   const path = `${prefix}/${key}.${ext}`;
+  const bucket = type === "image" ? IMAGE_BUCKET : AUDIO_BUCKET;
 
   const sb = getServiceClient();
-  const arrayBuffer = await file.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
+  const { data, error } = await sb.storage.from(bucket).createSignedUploadUrl(path);
 
-  const { error } = await sb.storage.from(bucket).upload(path, buffer, {
-    contentType: file.type || (type === "image" ? "image/png" : "application/octet-stream"),
-    upsert: false,
-  });
-
-  if (error) {
-    console.error("[upload] supabase error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error || !data) {
+    console.error("[upload/presign] error:", error);
+    return NextResponse.json({ error: error?.message || "failed to create upload url" }, { status: 500 });
   }
+
+  const result: Record<string, string> = { signedUrl: data.signedUrl, path };
 
   if (type === "image") {
-    const { data } = sb.storage.from(bucket).getPublicUrl(path);
-    return NextResponse.json({ path, publicUrl: data.publicUrl });
+    const { data: pub } = sb.storage.from(bucket).getPublicUrl(path);
+    result.publicUrl = pub.publicUrl;
   }
 
-  return NextResponse.json({ path });
+  return NextResponse.json(result);
 }

@@ -5,15 +5,27 @@ import { useEffect, useMemo, useState } from "react";
 type Genre = { id: number; name: string };
 
 async function uploadViaServer(file: File, type: "audio" | "image"): Promise<{ path: string; publicUrl?: string }> {
-  const form = new FormData();
-  form.append("file", file);
-  form.append("type", type);
-  const res = await fetch("/api/upload", { method: "POST", body: form });
-  if (!res.ok) {
-    const e = await res.json().catch(() => ({}));
-    throw new Error(e?.error || "Upload failed");
+  // Step 1: get a presigned upload URL from our server
+  const presignRes = await fetch("/api/upload", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ filename: file.name, type }),
+  });
+  if (!presignRes.ok) {
+    const e = await presignRes.json().catch(() => ({}));
+    throw new Error(e?.error || "Failed to get upload URL");
   }
-  return res.json();
+  const { signedUrl, path, publicUrl } = await presignRes.json();
+
+  // Step 2: upload file directly to Supabase (bypasses Next.js body limit)
+  const uploadRes = await fetch(signedUrl, {
+    method: "PUT",
+    headers: { "content-type": file.type || "application/octet-stream" },
+    body: file,
+  });
+  if (!uploadRes.ok) throw new Error("Upload to storage failed");
+
+  return { path, publicUrl };
 }
 
 
