@@ -5,7 +5,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const AUDIO_BUCKET = process.env.MUSIC_BUCKET || "music";
-const SIGNED_TTL = Number(process.env.SIGNED_URL_EXPIRES || 600);
 
 export async function GET(
   req: Request,
@@ -33,53 +32,17 @@ export async function GET(
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceRoleKey =
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE;
-
-    if (!supabaseUrl || !serviceRoleKey) {
+    if (!supabaseUrl) {
       return NextResponse.json({ error: "supabase env missing" }, { status: 500 });
     }
 
     const normalizedPath = objectPath.replace(/^\/+/, "");
 
-    // Direct REST call — avoids SDK fetch wrapper that fails on some Vercel regions
-    const signRes = await fetch(
-      `${supabaseUrl}/storage/v1/object/sign/${AUDIO_BUCKET}/${normalizedPath}`,
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${serviceRoleKey}`,
-          "apikey": serviceRoleKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ expiresIn: SIGNED_TTL }),
-      }
-    );
+    // Public bucket — construct URL locally, no outbound HTTP needed.
+    // (Supabase Storage API is IPv6-only from Vercel's egress, which fails.)
+    const publicUrl = `${supabaseUrl}/storage/v1/object/public/${AUDIO_BUCKET}/${normalizedPath}`;
 
-    if (!signRes.ok) {
-      const detail = await signRes.text().catch(() => signRes.statusText);
-      console.error("[stream] sign REST error:", signRes.status, detail);
-      return NextResponse.json(
-        { error: "failed to sign url", detail, bucket: AUDIO_BUCKET, path: normalizedPath },
-        { status: 500 }
-      );
-    }
-
-    const json = await signRes.json();
-    // Supabase returns { signedURL: "/storage/v1/object/sign/bucket/path?token=xxx" }
-    const signedPath: string = json.signedURL ?? json.signedUrl ?? "";
-    if (!signedPath) {
-      return NextResponse.json({ error: "empty signed url", raw: json }, { status: 500 });
-    }
-
-    // Supabase REST returns "/object/sign/..." — need to add "/storage/v1" prefix
-    const fullSignedUrl = signedPath.startsWith("http")
-      ? signedPath
-      : signedPath.startsWith("/storage/v1")
-        ? `${supabaseUrl}${signedPath}`
-        : `${supabaseUrl}/storage/v1${signedPath}`;
-
-    return NextResponse.json({ url: fullSignedUrl });
+    return NextResponse.json({ url: publicUrl });
   } catch (e: any) {
     console.error("GET /api/songs/[id]/stream error:", e);
     return NextResponse.json({ error: e?.message || "server error" }, { status: 500 });
