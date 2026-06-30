@@ -4,7 +4,7 @@ import { buildGoogleAuthUrl } from "@/libs/google";
 
 export async function GET(req: Request) {
   // Kiểm tra ENV tối thiểu
-  const required = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI"];
+  const required = ["MEZON_CLIENT_ID", "MEZON_CLIENT_SECRET", "MEZON_REDIRECT_URI"];
   const missing = required.filter((k) => !process.env[k]);
   if (missing.length) {
     return NextResponse.json({ error: `Missing ENV: ${missing.join(", ")}` }, { status: 500 });

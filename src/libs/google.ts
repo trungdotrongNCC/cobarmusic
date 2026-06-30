@@ -5,7 +5,8 @@ function mustEnv(k: string) {
   return v;
 }
 
-export function buildGoogleAuthUrl(state = "/") {
+export function buildGoogleAuthUrl(_redirectPath = "/") {
+  const state = crypto.randomUUID();
   const clientId = mustEnv("MEZON_CLIENT_ID");
   const redirectUri = mustEnv("MEZON_REDIRECT_URI");
   const scope = [

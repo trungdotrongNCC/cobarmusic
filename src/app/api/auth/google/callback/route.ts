@@ -47,7 +47,7 @@ export async function GET(req: Request) {
     });
 
     // 5) Chuẩn bị redirect về trang trước (nếu có cookie oauth_back)
-    const store = cookies(); // KHÔNG await
+    const store = await cookies();
     const back = store.get("oauth_back")?.value || "/";
 
     const res = NextResponse.redirect(new URL(back, req.url), 302);
