@@ -73,7 +73,10 @@ export async function GET(
 
     if (error || !data?.signedUrl) {
       console.error("[stream] createSignedUrl error:", error);
-      return NextResponse.json({ error: "failed to sign url" }, { status: 500 });
+      return NextResponse.json(
+        { error: "failed to sign url", detail: error?.message ?? "no signedUrl", bucket: AUDIO_BUCKET, path: normalizedPath },
+        { status: 500 }
+      );
     }
 
     // Trả về URL cho <audio src=...>
