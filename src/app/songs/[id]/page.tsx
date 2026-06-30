@@ -11,15 +11,15 @@ export default async function SongDetailsPage({ params }: PageProps) {
   const songId = Number(params.id);
   if (!Number.isFinite(songId)) notFound();
 
-  // 1) Xác định user & quyền sở hữu
+  // 1) Xác định user & trạng thái đã lưu vào thư viện
   const user = await getCurrentUser();
-  let owned = false;
+  let owned = false; // true = đã lưu vào My Songs
   if (user) {
-    const purchase = await prisma.purchase.findFirst({
+    const saved = await prisma.purchase.findFirst({
       where: { userId: user.id, songId },
       select: { id: true },
     });
-    owned = !!purchase;
+    owned = !!saved;
   }
 
   // 2) Lấy dữ liệu bài hát + comment
@@ -52,7 +52,7 @@ export default async function SongDetailsPage({ params }: PageProps) {
       : null,
     owned,
     previewPath: s.previewPath,
-    fullPath: owned ? s.fullPath : null,
+    fullPath: s.fullPath,
     comments: s.comments.map((c) => ({
       id: c.id,
       content: c.content,

@@ -80,15 +80,14 @@ export async function POST(req: Request) {
     const {
       title,
       description,
-      lyric,           // 🆕 nhận lyric
+      lyric,
       price,
-      previewPath,
       fullPath,
       avatarUrl,
       genreIds = [],
     } = body;
 
-    if (!title || !previewPath || !fullPath) {
+    if (!title || !fullPath) {
       return NextResponse.json(
         { error: "missing required fields" },
         { status: 400 }
@@ -99,11 +98,11 @@ export async function POST(req: Request) {
       data: {
         title,
         description: description || null,
-        lyric: lyric || null,          // 🆕 lưu lyric (nullable)
+        lyric: lyric || null,
         price: Number(price) || 0,
-        previewPath,                   // PATH private
-        fullPath,                      // PATH private
-        avatar: avatarUrl || null,     // public URL ảnh
+        previewPath: fullPath,         // reuse fullPath (preview no longer separate)
+        fullPath,
+        avatar: avatarUrl || null,
         sellerId: user.id,
         ...(genreIds.length
           ? { genres: { connect: genreIds.map((id: number) => ({ id })) } }

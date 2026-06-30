@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import LoginModal from "@/components/LoginModal";
-import PaymentQRModal from "@/components/PaymentQRModal";
 import toast from "react-hot-toast";
 
 // ===== Types =====
@@ -67,11 +66,9 @@ export default function SongDetailsClient({ initialSong }: { initialSong: SongDT
   const [loadingStream, setLoadingStream] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
 
-  // UI: auth + payment
+  // UI: auth + save
   const [showLogin, setShowLogin] = useState(false);
-  const [qrOpen, setQrOpen] = useState(false);
-  const [qrString, setQrString] = useState("");
-  const [paymentSessionId, setPaymentSessionId] = useState("");
+  const [saving, setSaving] = useState(false);
 
   // Comments input
   const [commentValue, setCommentValue] = useState("");
@@ -129,8 +126,7 @@ export default function SongDetailsClient({ initialSong }: { initialSong: SongDT
       forceTick((n) => n + 1);
 
       try {
-        const kind = song.owned ? "full" : "preview";
-        const r = await fetch(`/api/songs/${song.id}/stream?kind=${kind}`, {
+        const r = await fetch(`/api/songs/${song.id}/stream?kind=full`, {
           cache: "no-store",
           signal,
         });
@@ -191,7 +187,7 @@ export default function SongDetailsClient({ initialSong }: { initialSong: SongDT
         objectUrlRef.current = null;
       }
     };
-  }, [song.id, song.owned]);
+  }, [song.id]);
 
   // ===== AUDIO EVENTS =====
   useEffect(() => {
@@ -268,34 +264,19 @@ export default function SongDetailsClient({ initialSong }: { initialSong: SongDT
     forceTick((n) => n + 1);
   }
 
-  async function handlePaymentSuccess() {
-    setSong((prev) => ({ ...prev, owned: true }));
-    toast.success("Mua thành công! Đang phát bản full…", { duration: 6000, icon: "🎵" });
-    setQrOpen(false);
-  }
-
-  async function buySong(songId: number) {
+  async function toggleSave() {
+    setSaving(true);
     try {
-      const r = await fetch("/api/payments/create", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ songId }),
-      });
-      if (r.status === 401 || r.status === 403) {
-        setShowLogin(true);
-        return;
-      }
-      if (!r.ok) {
-        const e = await r.json().catch(() => ({}));
-        alert(e?.error || "Create payment failed");
-        return;
-      }
-      const data = await r.json();
-      setQrString(data.qrString);
-      setPaymentSessionId(data.sessionId);
-      setQrOpen(true);
+      const method = song.owned ? "DELETE" : "POST";
+      const r = await fetch(`/api/songs/${song.id}/save`, { method });
+      if (r.status === 401) { setShowLogin(true); return; }
+      if (!r.ok) { toast.error("Failed to update library"); return; }
+      setSong((prev) => ({ ...prev, owned: !prev.owned }));
+      toast.success(song.owned ? "Removed from My Songs" : "Added to My Songs 🎵");
     } catch {
-      alert("Create payment error");
+      toast.error("Network error");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -395,13 +376,14 @@ export default function SongDetailsClient({ initialSong }: { initialSong: SongDT
           )}
 
           <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12 }}>
-            {!song.owned ? (
-              <button onClick={() => buySong(song.id)} className="buy-btn" title="Buy this track">
-                Give&nbsp;Coffee&nbsp;•&nbsp;{formatPriceVND(song.price)}
-              </button>
-            ) : (
-              <span style={{ color: "#22c55e", fontWeight: 600 }}>Đã mua (Full)</span>
-            )}
+            <button
+              onClick={toggleSave}
+              disabled={saving}
+              className="buy-btn"
+              title={song.owned ? "Remove from My Songs" : "Add to My Songs"}
+            >
+              {saving ? "…" : song.owned ? "✓ In My Songs" : "+ Add to My Songs"}
+            </button>
           </div>
         </div>
       </div>
@@ -616,13 +598,6 @@ export default function SongDetailsClient({ initialSong }: { initialSong: SongDT
         open={showLogin}
         onClose={() => setShowLogin(false)}
         nextPath={typeof window !== "undefined" ? window.location.pathname : "/"}
-      />
-      <PaymentQRModal
-        open={qrOpen}
-        qrString={qrString}
-        sessionId={paymentSessionId}
-        onClose={() => setQrOpen(false)}
-        onSuccess={handlePaymentSuccess}
       />
 
       <style jsx>{`

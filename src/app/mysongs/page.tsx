@@ -12,7 +12,7 @@ export default async function MySongsPage() {
     redirect("/login?next=/mysongs");
   }
 
-  // Lấy các bài user đã mua (full)
+  // Lấy các bài user đã lưu vào thư viện
   const purchases = await prisma.purchase.findMany({
     where: { userId: user.id },
     orderBy: { purchasedAt: "desc" },

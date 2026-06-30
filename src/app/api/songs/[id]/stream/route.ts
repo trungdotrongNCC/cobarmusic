@@ -1,7 +1,6 @@
 // app/api/songs/[id]/stream/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/libs/prisma";
-import { getCurrentUser } from "@/libs/auth";
 import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
@@ -46,26 +45,6 @@ export async function GET(
       objectPath = song.fullPath || null;
       if (!objectPath) {
         return NextResponse.json({ error: "full not available" }, { status: 404 });
-      }
-
-      // Kiểm quyền: người mua, seller, hoặc admin
-      const me = await getCurrentUser();
-      if (!me) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-
-      const isSeller = me.id === song.sellerId;
-      const isAdmin = (me as any)?.role === "admin";
-
-      let isOwner = false;
-      if (!isSeller && !isAdmin) {
-        const purchased = await prisma.purchase.findFirst({
-          where: { userId: me.id, songId: song.id },
-          select: { id: true },
-        });
-        isOwner = !!purchased;
-      }
-
-      if (!(isSeller || isAdmin || isOwner)) {
-        return NextResponse.json({ error: "forbidden" }, { status: 403 });
       }
     } else {
       return NextResponse.json({ error: "invalid kind" }, { status: 400 });

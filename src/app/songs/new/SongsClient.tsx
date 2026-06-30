@@ -29,19 +29,16 @@ export default function SongsClient() {
   const [lyric, setLyric] = useState("");
 
   // file chọn (chỉ để hiển thị tên)
-  const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [fullFile, setFullFile] = useState<File | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
 
   // AUDIO (private) → lưu PATH (không URL)
-  const [previewPath, setPreviewPath] = useState<string>("");
   const [fullPath, setFullPath] = useState<string>("");
 
   // IMAGE (public) → lưu PUBLIC URL
   const [avatarUrl, setAvatarUrl] = useState<string>("");
 
   // trạng thái upload
-  const [upPreview, setUpPreview] = useState(false);
   const [upFull, setUpFull] = useState(false);
   const [upAvatar, setUpAvatar] = useState(false);
 
@@ -102,23 +99,6 @@ export default function SongsClient() {
   }
 
   // --- Handlers chọn file: upload NGAY khi chọn ---
-  async function handlePickPreview(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0] ?? null;
-    setPreviewFile(f);
-    setPreviewPath("");
-    if (!f) return;
-    try {
-      setUpPreview(true);
-      const path = await uploadAudioAndGetPath("preview", f);
-      setPreviewPath(path);
-      setMsg(null);
-    } catch (err: any) {
-      setMsg(err?.message || "Upload preview thất bại");
-    } finally {
-      setUpPreview(false);
-    }
-  }
-
   async function handlePickFull(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null;
     setFullFile(f);
@@ -154,18 +134,8 @@ export default function SongsClient() {
   }
 
   const readyToCreate = useMemo(() => {
-    const hasTitle = !!title.trim();
-    // cần previewPath + fullPath đã có (upload xong)
-    return (
-      hasTitle &&
-      !!previewPath &&
-      !!fullPath &&
-      !upPreview &&
-      !upFull &&
-      !upAvatar &&
-      !submitting
-    );
-  }, [title, previewPath, fullPath, upPreview, upFull, upAvatar, submitting]);
+    return !!title.trim() && !!fullPath && !upFull && !upAvatar && !submitting;
+  }, [title, fullPath, upFull, upAvatar, submitting]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -187,9 +157,8 @@ export default function SongsClient() {
           price: Number(price) || 0,
           description: description || "",
           lyric: lyric || "",
-          previewPath, // PATH trong bucket private
-          fullPath,    // PATH trong bucket private
-          avatarUrl: avatarUrl || null, // public URL
+          fullPath,
+          avatarUrl: avatarUrl || null,
           genreIds: selectedGenreIds,
         }),
       });
@@ -204,10 +173,8 @@ export default function SongsClient() {
         setPrice("0");
         setDescription("");
         setLyric("");
-        setPreviewFile(null);
         setFullFile(null);
         setAvatarFile(null);
-        setPreviewPath("");
         setFullPath("");
         setAvatarUrl("");
         setSelectedGenreIds([]);
@@ -383,63 +350,33 @@ export default function SongsClient() {
           )}
         </div>
 
-        {/* Audio files (private) */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <div>
-            <label style={{ display: "block", fontWeight: 600 }}>
-              Preview file (mp3, private) *
-            </label>
-            <input
-              type="file"
-              accept="audio/*"
-              onChange={handlePickPreview}
-              required
-              style={{ display: "block" }}
-            />
-            {previewFile && (
-              <div style={{ fontSize: 12, color: "#bbb", marginTop: 4 }}>
-                {previewFile.name}
-              </div>
-            )}
-            {upPreview && (
-              <div style={{ fontSize: 12, color: "#bbb", marginTop: 4 }}>
-                Uploading preview…
-              </div>
-            )}
-            {previewPath && (
-              <div style={{ fontSize: 12, color: "#4ade80", marginTop: 4, wordBreak: "break-all" }}>
-                Preview uploaded (path): {previewPath}
-              </div>
-            )}
-          </div>
-
-          <div>
-            <label style={{ display: "block", fontWeight: 600 }}>
-              Full file (mp3, private) *
-            </label>
-            <input
-              type="file"
-              accept="audio/*"
-              onChange={handlePickFull}
-              required
-              style={{ display: "block" }}
-            />
-            {fullFile && (
-              <div style={{ fontSize: 12, color: "#bbb", marginTop: 4 }}>
-                {fullFile.name}
-              </div>
-            )}
-            {upFull && (
-              <div style={{ fontSize: 12, color: "#bbb", marginTop: 4 }}>
-                Uploading full…
-              </div>
-            )}
-            {fullPath && (
-              <div style={{ fontSize: 12, color: "#4ade80", marginTop: 4, wordBreak: "break-all" }}>
-                Full uploaded (path): {fullPath}
-              </div>
-            )}
-          </div>
+        {/* Audio file (private) */}
+        <div>
+          <label style={{ display: "block", fontWeight: 600 }}>
+            Audio file (mp3) *
+          </label>
+          <input
+            type="file"
+            accept="audio/*"
+            onChange={handlePickFull}
+            required
+            style={{ display: "block" }}
+          />
+          {fullFile && (
+            <div style={{ fontSize: 12, color: "#bbb", marginTop: 4 }}>
+              {fullFile.name}
+            </div>
+          )}
+          {upFull && (
+            <div style={{ fontSize: 12, color: "#bbb", marginTop: 4 }}>
+              Uploading…
+            </div>
+          )}
+          {fullPath && (
+            <div style={{ fontSize: 12, color: "#4ade80", marginTop: 4, wordBreak: "break-all" }}>
+              ✓ Uploaded
+            </div>
+          )}
         </div>
 
         <button
