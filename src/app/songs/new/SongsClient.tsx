@@ -1,26 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
 
 type Genre = { id: number; name: string };
 
-// --- Supabase client (FE) ---
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-// Buckets: audio = PRIVATE, images = PUBLIC
-const AUDIO_BUCKET = "music";   // private
-const IMAGE_BUCKET = "images";  // public
-
-// util tạo path unique (path bên trong bucket)
-function makePath(prefix: string, file: File) {
-  const ext = file.name.split(".").pop() || "bin";
-  const key = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  return `${prefix}/${key}.${ext}`;
+async function uploadViaServer(file: File, type: "audio" | "image"): Promise<{ path: string; publicUrl?: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("type", type);
+  const res = await fetch("/api/upload", { method: "POST", body: form });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e?.error || "Upload failed");
+  }
+  return res.json();
 }
+
 
 export default function SongsClient() {
   const [title, setTitle] = useState("");
@@ -66,36 +61,15 @@ export default function SongsClient() {
     );
   }
 
-  /** Upload audio lên bucket PRIVATE → trả về PATH (không public URL) */
-  async function uploadAudioAndGetPath(prefix: string, file: File) {
-    const maxSize = 50 * 1024 * 1024; // 50MB
-    if (file.size > maxSize) {
-      throw new Error(`File quá lớn. Giới hạn: ${Math.round(maxSize / 1024 / 1024)}MB`);
-    }
-    const path = makePath(prefix, file);
-    const { error } = await supabase.storage.from(AUDIO_BUCKET).upload(path, file, {
-      contentType: file.type || "application/octet-stream",
-      upsert: false,
-    });
-    if (error) throw error;
-    return path; // chỉ lưu path
+  async function uploadAudioAndGetPath(_prefix: string, file: File) {
+    const { path } = await uploadViaServer(file, "audio");
+    return path;
   }
 
-  /** Upload ảnh lên bucket PUBLIC → trả về PUBLIC URL */
-  async function uploadImageAndGetPublicUrl(prefix: string, file: File) {
-    const maxSize = 5 * 1024 * 1024; // 5MB
-    if (file.size > maxSize) {
-      throw new Error(`Ảnh quá lớn. Giới hạn: ${Math.round(maxSize / 1024 / 1024)}MB`);
-    }
-    const path = makePath(prefix, file);
-    const { error } = await supabase.storage.from(IMAGE_BUCKET).upload(path, file, {
-      contentType: file.type || "image/png",
-      upsert: false,
-    });
-    if (error) throw error;
-
-    const { data } = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(path);
-    return data.publicUrl; // URL public
+  async function uploadImageAndGetPublicUrl(_prefix: string, file: File) {
+    const { publicUrl } = await uploadViaServer(file, "image");
+    if (!publicUrl) throw new Error("No public URL returned");
+    return publicUrl;
   }
 
   // --- Handlers chọn file: upload NGAY khi chọn ---
