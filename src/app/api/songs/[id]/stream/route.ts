@@ -1,16 +1,10 @@
-// app/api/songs/[id]/stream/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/libs/prisma";
-import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
-// Nếu dùng app router caching: luôn động để không cache user permissions
 export const dynamic = "force-dynamic";
 
-// Đổi qua ENV nếu muốn
 const AUDIO_BUCKET = process.env.MUSIC_BUCKET || "music";
-
-// TTL của signed URL (giây)
 const SIGNED_TTL = Number(process.env.SIGNED_URL_EXPIRES || 600);
 
 export async function GET(
@@ -20,40 +14,25 @@ export async function GET(
   try {
     const { id } = await params;
     const url = new URL(req.url);
-    const kind = (url.searchParams.get("kind") || "full").toLowerCase(); // full | preview
+    const kind = (url.searchParams.get("kind") || "full").toLowerCase();
 
     const songId = Number(id);
     if (!Number.isFinite(songId)) {
       return NextResponse.json({ error: "invalid id" }, { status: 400 });
     }
 
-    // Lấy song (path + seller)
     const song = await prisma.song.findUnique({
       where: { id: songId },
-      select: { id: true, sellerId: true, previewPath: true, fullPath: true },
+      select: { previewPath: true, fullPath: true },
     });
     if (!song) return NextResponse.json({ error: "song not found" }, { status: 404 });
 
-    // Quyết định objectPath và kiểm quyền nếu nghe full
-    let objectPath: string | null = null;
-
-    if (kind === "preview") {
-      objectPath = song.previewPath || null;
-      if (!objectPath) {
-        return NextResponse.json({ error: "preview not available" }, { status: 404 });
-      }
-    } else if (kind === "full") {
-      objectPath = song.fullPath || null;
-      if (!objectPath) {
-        return NextResponse.json({ error: "full not available" }, { status: 404 });
-      }
-    } else {
-      return NextResponse.json({ error: "invalid kind" }, { status: 400 });
+    const objectPath = kind === "preview" ? song.previewPath : song.fullPath;
+    if (!objectPath) {
+      return NextResponse.json({ error: `${kind} not available` }, { status: 404 });
     }
 
-    // ENV Supabase
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    // Tên thường dùng là SUPABASE_SERVICE_ROLE_KEY; hỗ trợ cả 2 để linh hoạt.
     const serviceRoleKey =
       process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE;
 
@@ -61,26 +40,46 @@ export async function GET(
       return NextResponse.json({ error: "supabase env missing" }, { status: 500 });
     }
 
-    // Server-side client với service role để ký URL bucket private
-    const sb = createClient(supabaseUrl, serviceRoleKey);
+    const normalizedPath = objectPath.replace(/^\/+/, "");
 
-    // Chuẩn hóa path (loại bỏ slash đầu nếu có)
-    const normalizedPath = String(objectPath).replace(/^\/+/, "");
+    // Direct REST call — avoids SDK fetch wrapper that fails on some Vercel regions
+    const signRes = await fetch(
+      `${supabaseUrl}/storage/v1/object/sign/${AUDIO_BUCKET}/${normalizedPath}`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${serviceRoleKey}`,
+          "apikey": serviceRoleKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ expiresIn: SIGNED_TTL }),
+      }
+    );
 
-    const { data, error } = await sb.storage
-      .from(AUDIO_BUCKET)
-      .createSignedUrl(normalizedPath, SIGNED_TTL);
-
-    if (error || !data?.signedUrl) {
-      console.error("[stream] createSignedUrl error:", error);
+    if (!signRes.ok) {
+      const detail = await signRes.text().catch(() => signRes.statusText);
+      console.error("[stream] sign REST error:", signRes.status, detail);
       return NextResponse.json(
-        { error: "failed to sign url", detail: error?.message ?? "no signedUrl", bucket: AUDIO_BUCKET, path: normalizedPath },
+        { error: "failed to sign url", detail, bucket: AUDIO_BUCKET, path: normalizedPath },
         { status: 500 }
       );
     }
 
-    // Trả về URL cho <audio src=...>
-    return NextResponse.json({ url: data.signedUrl });
+    const json = await signRes.json();
+    // Supabase returns { signedURL: "/storage/v1/object/sign/bucket/path?token=xxx" }
+    const signedPath: string = json.signedURL ?? json.signedUrl ?? "";
+    if (!signedPath) {
+      return NextResponse.json({ error: "empty signed url", raw: json }, { status: 500 });
+    }
+
+    // Supabase REST returns "/object/sign/..." — need to add "/storage/v1" prefix
+    const fullSignedUrl = signedPath.startsWith("http")
+      ? signedPath
+      : signedPath.startsWith("/storage/v1")
+        ? `${supabaseUrl}${signedPath}`
+        : `${supabaseUrl}/storage/v1${signedPath}`;
+
+    return NextResponse.json({ url: fullSignedUrl });
   } catch (e: any) {
     console.error("GET /api/songs/[id]/stream error:", e);
     return NextResponse.json({ error: e?.message || "server error" }, { status: 500 });
