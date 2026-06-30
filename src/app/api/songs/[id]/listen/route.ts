@@ -3,48 +3,36 @@ import { prisma } from "@/libs/prisma";
 
 export const runtime = "nodejs";
 
-/**
- * POST /api/songs/:id/listen
- * - Tăng listens +1
- * - Chống đếm trùng bằng cookie trong 1 giờ (mỗi bài 1 lần / trình duyệt)
- */
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const songId = Number(params.id);
+  const { id } = await params;
+  const songId = Number(id);
   if (!Number.isFinite(songId)) {
     return NextResponse.json({ error: "invalid id" }, { status: 400 });
   }
 
-  const cookieName = `ls_${songId}`; // listened-song
-
-  // Check cookie: nếu đã nghe bài này trong 1h -> không cộng nữa
+  const cookieName = `ls_${songId}`;
   const cookieHeader = req.headers.get("cookie") || "";
   const alreadyCounted = cookieHeader
     .split(";")
     .some((c) => c.trim().startsWith(`${cookieName}=`));
 
   const res = new NextResponse(null, { status: 204 });
-
-  if (alreadyCounted) {
-    return res; // đã có cookie -> thoát sớm
-  }
+  if (alreadyCounted) return res;
 
   try {
     await prisma.song.update({
       where: { id: songId },
       data: { listens: { increment: 1 } },
     });
-
-    // Set cookie 1 giờ để chống trùng
     res.cookies.set(cookieName, "1", {
-      httpOnly: false,   // để client nhìn thấy cũng được (không nhạy cảm)
+      httpOnly: false,
       sameSite: "lax",
-      maxAge: 1 * 60,   // 1 phút
+      maxAge: 60,
       path: "/",
     });
-
     return res;
   } catch (e) {
     console.error("listen increment error", e);

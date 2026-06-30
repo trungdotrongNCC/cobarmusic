@@ -10,27 +10,29 @@ function parseId(id: string) {
 
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const id = parseId(params.id);
-  if (!id) return NextResponse.json({ error: "invalid id" }, { status: 400 });
+  const { id } = await params;
+  const userId = parseId(id);
+  if (!userId) return NextResponse.json({ error: "invalid id" }, { status: 400 });
 
-  const user = await prisma.user.findUnique({ where: { id } });
+  const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) return NextResponse.json({ error: "not found" }, { status: 404 });
   return NextResponse.json(user);
 }
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const id = parseId(params.id);
-  if (!id) return NextResponse.json({ error: "invalid id" }, { status: 400 });
+  const { id } = await params;
+  const userId = parseId(id);
+  if (!userId) return NextResponse.json({ error: "invalid id" }, { status: 400 });
 
   const body = await req.json().catch(() => ({}));
   try {
     const updated = await prisma.user.update({
-      where: { id },
+      where: { id: userId },
       data: {
         email: typeof body.email === "string" ? body.email : undefined,
         name: typeof body.name === "string" ? body.name : undefined,
@@ -44,11 +46,12 @@ export async function PATCH(
 
 export async function DELETE(
   _req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const id = parseId(params.id);
-  if (!id) return NextResponse.json({ error: "invalid id" }, { status: 400 });
+  const { id } = await params;
+  const userId = parseId(id);
+  if (!userId) return NextResponse.json({ error: "invalid id" }, { status: 400 });
 
-  await prisma.user.delete({ where: { id } });
+  await prisma.user.delete({ where: { id: userId } });
   return NextResponse.json({ ok: true });
 }

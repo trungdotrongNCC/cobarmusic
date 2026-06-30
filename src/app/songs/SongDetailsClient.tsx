@@ -113,11 +113,6 @@ export default function SongDetailsClient({ initialSong }: { initialSong: SongDT
       if (a.src) a.removeAttribute("src");
       a.load();
 
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
-        objectUrlRef.current = null;
-      }
-
       setLoadingStream(true);
       setStreamError(null);
       setDuration(0);
@@ -136,33 +131,22 @@ export default function SongDetailsClient({ initialSong }: { initialSong: SongDT
         if (!signed) throw new Error("missing url");
         if (cancelled) return;
 
-        const resp = await fetch(signed, { mode: "cors", cache: "no-store", signal });
-        if (!resp.ok) throw new Error("download audio failed");
-        const blob = await resp.blob();
-        if (cancelled) return;
-
-        const url = URL.createObjectURL(blob);
-        objectUrlRef.current = url;
-
-        a.crossOrigin = "anonymous";
+        // stream directly — browser handles buffering
+        a.src = signed;
         a.preload = "metadata";
-        a.src = url;
+        a.load();
 
         await new Promise<void>((resolve, reject) => {
-          const onLoadedMeta = () => {
-            a.removeEventListener("loadedmetadata", onLoadedMeta);
+          const onMeta = () => {
             setDuration(Number.isFinite(a.duration) && a.duration > 0 ? a.duration : 0);
             resolve();
           };
-          const onErr = () => {
-            a.removeEventListener("loadedmetadata", onLoadedMeta);
-            reject(a.error);
-          };
-          a.addEventListener("loadedmetadata", onLoadedMeta, { once: true });
+          const onErr = () => reject(a.error || new Error("audio load error"));
+          a.addEventListener("loadedmetadata", onMeta, { once: true });
           a.addEventListener("error", onErr, { once: true });
-          a.load();
         });
 
+        if (cancelled) return;
 
         setLoadingStream(false);
         forceTick((n) => n + 1);
@@ -182,10 +166,6 @@ export default function SongDetailsClient({ initialSong }: { initialSong: SongDT
       cancelled = true;
       abortRef.current?.abort();
       stopProgress();
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
-        objectUrlRef.current = null;
-      }
     };
   }, [song.id]);
 

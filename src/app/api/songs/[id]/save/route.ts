@@ -4,14 +4,15 @@ import { getCurrentUser } from "@/libs/auth";
 
 export const runtime = "nodejs";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 // POST → save song to library
 export async function POST(_req: Request, { params }: Params) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const songId = Number(params.id);
+  const { id } = await params;
+  const songId = Number(id);
   if (!Number.isFinite(songId)) return NextResponse.json({ error: "invalid id" }, { status: 400 });
 
   const song = await prisma.song.findUnique({ where: { id: songId }, select: { id: true } });
@@ -31,7 +32,8 @@ export async function DELETE(_req: Request, { params }: Params) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const songId = Number(params.id);
+  const { id } = await params;
+  const songId = Number(id);
   if (!Number.isFinite(songId)) return NextResponse.json({ error: "invalid id" }, { status: 400 });
 
   await prisma.purchase.deleteMany({ where: { userId: user.id, songId } });

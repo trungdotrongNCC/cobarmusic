@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import Tabs from "@/components/Tabs";
 import LoginModal from "@/components/LoginModal";
-import PaymentQRModal from "@/components/PaymentQRModal";
 import toast from "react-hot-toast";
 
 type Genre = { id: number; name: string };
@@ -70,9 +69,7 @@ export default function SongsListClient({ initialSongs }: { initialSongs: SongDT
   const [loadingStream, setLoadingStream] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [showLogin, setShowLogin] = useState(false);
-  const [qrOpen, setQrOpen] = useState(false);
-  const [qrString, setQrString] = useState("");
-  const [paymentSessionId, setPaymentSessionId] = useState("");
+  const [savingId, setSavingId] = useState<number | null>(null);
 
   // interval cập nhật tiến độ (fallback nếu timeupdate thưa)
   const progressIntervalRef = useRef<number | null>(null);
@@ -116,11 +113,6 @@ export default function SongsListClient({ initialSongs }: { initialSongs: SongDT
       if (a.src) a.removeAttribute("src");
       a.load();
 
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
-        objectUrlRef.current = null;
-      }
-
       setLoadingStream(true);
       setStreamError(null);
       setDuration(0);
@@ -129,8 +121,8 @@ export default function SongsListClient({ initialSongs }: { initialSongs: SongDT
       forceTick((n) => n + 1); // cập nhật icon ngay
 
       try {
-        // 1) lấy signed url
-        const r = await fetch(`/api/songs/${current.id}/stream?kind=preview`, {
+        // 1) get signed url from server
+        const r = await fetch(`/api/songs/${current.id}/stream?kind=full`, {
           cache: "no-store",
           signal,
         });
@@ -140,42 +132,27 @@ export default function SongsListClient({ initialSongs }: { initialSongs: SongDT
         if (!signed) throw new Error("missing url");
         if (cancelled) return;
 
-        // 2) tải blob
-        const resp = await fetch(signed, { mode: "cors", cache: "no-store", signal });
-        if (!resp.ok) throw new Error("download preview failed");
-        const blob = await resp.blob();
-        if (cancelled) return;
-
-        // 3) phát từ objectURL
-        const url = URL.createObjectURL(blob);
-        objectUrlRef.current = url;
-
-        a.crossOrigin = "anonymous";
+        // 2) stream directly — no blob download needed
+        a.src = signed;
         a.preload = "metadata";
-        a.src = url;
+        a.load();
 
         await new Promise<void>((resolve, reject) => {
-          const onLoadedMeta = () => {
-            a.removeEventListener("loadedmetadata", onLoadedMeta);
-            const d = a.duration;
-            setDuration(Number.isFinite(d) && d > 0 ? d : 0);
+          const onMeta = () => {
+            setDuration(Number.isFinite(a.duration) && a.duration > 0 ? a.duration : 0);
             resolve();
           };
-          const onErr = () => {
-            a.removeEventListener("loadedmetadata", onLoadedMeta);
-            reject(a.error);
-          };
-          a.addEventListener("loadedmetadata", onLoadedMeta, { once: true });
+          const onErr = () => reject(a.error || new Error("audio error"));
+          a.addEventListener("loadedmetadata", onMeta, { once: true });
           a.addEventListener("error", onErr, { once: true });
-          a.load();
         });
 
         if (cancelled) return;
 
-        await a.play();              // sẽ bắn event 'play'
-        startProgress();             // bật ngay cả khi event play trễ
+        await a.play();
+        startProgress();
         setLoadingStream(false);
-        forceTick((n) => n + 1);     // cập nhật icon
+        forceTick((n) => n + 1);
       } catch (err: any) {
         if (!cancelled && err?.name !== "AbortError") {
           setStreamError(err?.message || "Stream failed");
@@ -191,8 +168,7 @@ export default function SongsListClient({ initialSongs }: { initialSongs: SongDT
       cancelled = true;
       abortRef.current?.abort();
       stopProgress();
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
+      if (false) { // objectUrl no longer used
         objectUrlRef.current = null;
       }
     };
@@ -298,27 +274,21 @@ export default function SongsListClient({ initialSongs }: { initialSongs: SongDT
     setSongs(data.items);
   }
 
-  async function handlePaymentSuccess() {
-    await reloadSongs();
-    toast.success("Mua thành công, Bạn vào Library để nghe nhé", { duration: 6000, icon: "🎵" });
-    setQrOpen(false);
-  }
-
-  async function buySong(songId: number) {
+  async function toggleSave(songId: number, currentlyOwned: boolean) {
+    setSavingId(songId);
     try {
-      const r = await fetch("/api/payments/create", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ songId }),
-      });
-      if (r.status === 401 || r.status === 403) { setShowLogin(true); return; }
-      if (!r.ok) { const e = await r.json().catch(() => ({})); alert(e?.error || "Create payment failed"); return; }
-      const data = await r.json();
-      setQrString(data.qrString);
-      setPaymentSessionId(data.sessionId);
-      setQrOpen(true);
+      const method = currentlyOwned ? "DELETE" : "POST";
+      const r = await fetch(`/api/songs/${songId}/save`, { method });
+      if (r.status === 401) { setShowLogin(true); return; }
+      if (!r.ok) { toast.error("Failed to update library"); return; }
+      setSongs((prev) =>
+        prev.map((s) => s.id === songId ? { ...s, owned: !currentlyOwned } : s)
+      );
+      toast.success(currentlyOwned ? "Removed from My Songs" : "Added to My Songs");
     } catch {
-      alert("Create payment error");
+      toast.error("Network error");
+    } finally {
+      setSavingId(null);
     }
   }
 
@@ -426,16 +396,15 @@ export default function SongsListClient({ initialSongs }: { initialSongs: SongDT
                 </div>
                 </div>
 
-                {/* right: Give Coffee (gradient + có giá) */}
-                {!s.owned && (
-                  <button
-                    onClick={() => buySong(s.id)}
-                    className="buy-btn"
-                    title="Buy this track"
-                  >
-                    Give&nbsp;Coffee&nbsp;•&nbsp;{formatPriceVND(s.price)}
-                  </button>
-                )}
+                {/* right: Add to My Songs toggle */}
+                <button
+                  onClick={() => toggleSave(s.id, s.owned)}
+                  disabled={savingId === s.id}
+                  className="buy-btn"
+                  title={s.owned ? "Remove from My Songs" : "Add to My Songs"}
+                >
+                  {savingId === s.id ? "…" : s.owned ? "✓ In My Songs" : "+ Add to My Songs"}
+                </button>
               </div>
             );
           })}
@@ -567,15 +536,6 @@ export default function SongsListClient({ initialSongs }: { initialSongs: SongDT
         open={showLogin}
         onClose={() => setShowLogin(false)}
         nextPath={typeof window !== "undefined" ? window.location.pathname : "/"}
-      />
-
-      {/* Modal QR thanh toán */}
-      <PaymentQRModal
-        open={qrOpen}
-        qrString={qrString}
-        sessionId={paymentSessionId}
-        onClose={() => setQrOpen(false)}
-        onSuccess={handlePaymentSuccess}
       />
 
       <style jsx>{`

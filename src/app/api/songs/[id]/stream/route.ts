@@ -15,13 +15,14 @@ const SIGNED_TTL = Number(process.env.SIGNED_URL_EXPIRES || 600);
 
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const url = new URL(req.url);
-    const kind = (url.searchParams.get("kind") || "preview").toLowerCase(); // preview | full
+    const kind = (url.searchParams.get("kind") || "full").toLowerCase(); // full | preview
 
-    const songId = Number(params.id);
+    const songId = Number(id);
     if (!Number.isFinite(songId)) {
       return NextResponse.json({ error: "invalid id" }, { status: 400 });
     }
